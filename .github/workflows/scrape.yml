@@ -4,7 +4,7 @@ on:
   workflow_dispatch:
 
 permissions:
-  contents: write        # ← wajib untuk push
+  contents: write
 
 jobs:
   scrape:
@@ -15,13 +15,13 @@ jobs:
       - name: Checkout
         uses: actions/checkout@v4
         with:
-          persist-credentials: true   # supaya bisa push balik
+          persist-credentials: true
 
       - name: Setup Python
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          cache: "pip"
+          # cache: "pip"   ← dihapus, tidak perlu requirements.txt
 
       - name: Install dependencies
         run: pip install requests
@@ -34,11 +34,8 @@ jobs:
         run: |
           git config user.name  "github-actions[bot]"
           git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
-
-          # hanya add file yang ada (hindari error kalau file tidak dibuat)
           [ -f all_skins.json ] && git add all_skins.json || true
           [ -f progress.json  ] && git add progress.json  || true
-
           if git diff --cached --quiet; then
             echo "Tidak ada perubahan, skip commit."
           else
