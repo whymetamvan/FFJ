@@ -1,6 +1,6 @@
 """
 Scraper FF Wiki (freefirejornal.com)
-- Pakai curl_cffi (impersonate Chrome) untuk bypass TLS fingerprint Cloudflare
+- curl_cffi (impersonate Chrome) + optional WARP proxy (socks5h) untuk bypass Cloudflare
 - Ambil semua item dari /api/ffwiki/search (pageSize di-clamp server ke 12)
 - Paralel + token cache + resume
 - Output: all_skins.json
@@ -75,13 +75,21 @@ SAVE_EVERY     = 50
 MAX_RETRY      = 5
 IMPERSONATE    = os.getenv("IMPERSONATE", "chrome124")
 
+# WARP proxy (opsional). Format: socks5h://127.0.0.1:40000
+PROXY_URL = os.getenv("PROXY_URL", "").strip()
+
 
 # =========================================================
-# SESSION (curl_cffi dengan impersonate Chrome)
+# SESSION
 # =========================================================
 def make_session() -> requests.Session:
-    s = requests.Session(impersonate=IMPERSONATE)
-    print(f"[SESSION] curl_cffi impersonate={IMPERSONATE}")
+    kwargs = {"impersonate": IMPERSONATE}
+    if PROXY_URL:
+        kwargs["proxies"] = {"http": PROXY_URL, "https": PROXY_URL}
+        print(f"[SESSION] curl_cffi impersonate={IMPERSONATE} proxy={PROXY_URL}")
+    else:
+        print(f"[SESSION] curl_cffi impersonate={IMPERSONATE} (tanpa proxy)")
+    s = requests.Session(**kwargs)
     return s
 
 
@@ -149,6 +157,7 @@ def fetch_page(session: requests.Session, tm: TokenManager,
                 continue
             if r.status_code in (401, 403):
                 last_err = str(r.status_code)
+                time.sleep(1.0 * (attempt + 1))
                 continue
             r.raise_for_status()
             d = r.json()
