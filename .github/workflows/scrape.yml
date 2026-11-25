@@ -8,8 +8,8 @@ permissions:
 
 jobs:
   scrape:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
+    runs-on: self-hosted          # ← kunci: pakai PC sendiri, IP residential
+    timeout-minutes: 60
 
     steps:
       - name: Checkout
@@ -21,7 +21,6 @@ jobs:
         uses: actions/setup-python@v5
         with:
           python-version: "3.12"
-          # cache: "pip"   ← dihapus, tidak perlu requirements.txt
 
       - name: Install dependencies
         run: pip install requests
