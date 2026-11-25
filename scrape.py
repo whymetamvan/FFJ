@@ -1,6 +1,7 @@
 """
 Scraper FF Wiki (freefirejornal.com)
-- Ambil semua item dari endpoint /api/ffwiki/search (pageSize di-clamp server ke 12)
+- Pakai curl_cffi (impersonate Chrome) untuk bypass TLS fingerprint Cloudflare
+- Ambil semua item dari /api/ffwiki/search (pageSize di-clamp server ke 12)
 - Paralel + token cache + resume
 - Output: all_skins.json
 """
@@ -9,9 +10,9 @@ import json
 import os
 import time
 import threading
-import requests
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from requests.adapters import HTTPAdapter
+
+from curl_cffi import requests
 
 # =========================================================
 # KONFIGURASI
@@ -64,25 +65,23 @@ PAGE_PROOF = os.getenv(
     "CfDJ8PQDJmHf4yBElLYqnYa4OoWvvjuQ8vfczbFeAnEs59lavhIPsB_zLZYnJSfMOLC4sHAyxc_ZVRhb4x1oIuEdDhWAqZwosxVfaMn5U_QVFJ1fqH3DA0Eg_BvsTFZanxrMdJ_8fehHmdfNy0PFwTnldU77SqtrKtBeleA9Nx2FuU3g0beRc_YpQX4isIQ70bzIShkqjUPtMUGMYl8VA7TWNI0dilX4w_V2eJYYidQzN5HpxHQpeLCb2eks3qBSp1nWrq_k6td9k8hfQgTODLtyBVKhdILGwNmUCnDTZDbXjgufd6wbQM8fzjyuDz2T7i4lhaUyjiJHgcZl0euSPvViSFYwrBXXbHjw5wznkISz7pts"
 )
 
-PAGE_SIZE      = 12                                      # server clamp
-MAX_WORKERS    = int(os.getenv("MAX_WORKERS", "12"))     # GA: 12, lokal: 24
+PAGE_SIZE      = 12
+MAX_WORKERS    = int(os.getenv("MAX_WORKERS", "12"))
 TOKEN_LIFETIME = float(os.getenv("TOKEN_LIFETIME", "12"))
 TOKEN_BATCH    = int(os.getenv("TOKEN_BATCH", "80"))
 OUTPUT_FILE    = os.getenv("OUTPUT_FILE", "all_skins.json")
 RESUME_FILE    = os.getenv("RESUME_FILE", "progress.json")
 SAVE_EVERY     = 50
 MAX_RETRY      = 5
+IMPERSONATE    = os.getenv("IMPERSONATE", "chrome124")
 
 
 # =========================================================
-# SESSION
+# SESSION (curl_cffi dengan impersonate Chrome)
 # =========================================================
 def make_session() -> requests.Session:
-    s = requests.Session()
-    pool = max(MAX_WORKERS * 2, 20)
-    adapter = HTTPAdapter(pool_connections=pool, pool_maxsize=pool, max_retries=0)
-    s.mount("https://", adapter)
-    s.mount("http://", adapter)
+    s = requests.Session(impersonate=IMPERSONATE)
+    print(f"[SESSION] curl_cffi impersonate={IMPERSONATE}")
     return s
 
 
@@ -180,7 +179,6 @@ def fetch_all(session: requests.Session, tm: TokenManager) -> dict:
             print(f"[RESUME] gagal baca progress, mulai baru: {e}")
             done_pages = {}
 
-    # kalau meta belum ada, ambil halaman 1 untuk tahu total pages
     if not meta or "1" not in done_pages:
         first = fetch_page(session, tm, 1)
         d = first.get("data", {})
@@ -207,7 +205,7 @@ def fetch_all(session: requests.Session, tm: TokenManager) -> dict:
         push(done_pages[p_str])
 
     todo = [p for p in range(1, total_pages + 1) if str(p) not in done_pages]
-    print(f"[INFO] sisa {len(todo)} halaman untuk diambil (worker={MAX_WORKERS})")
+    print(f"[INFO] sisa {len(todo)} halaman (worker={MAX_WORKERS})")
 
     if not todo:
         return {"ok": True, "meta": meta, "count": len(all_items), "items": all_items}
@@ -267,13 +265,13 @@ def main():
     try:
         result = fetch_all(session, tm)
         with open(OUTPUT_FILE, "w", encoding="utf-8") as f:
-            json.dump(result, f, ensure_ascii=False, indent=2)
+            json.dump(result, f, ensure_ascii=False, separators=(",", ":"))
         print(
             f"\n✓ Selesai dalam {time.time()-t0:.1f}s — "
             f"{result['count']} item unik → {OUTPUT_FILE}"
         )
     except KeyboardInterrupt:
-        print("\n⏸  Dihentikan. Jalankan lagi untuk resume dari progress.json")
+        print("\n⏸  Dihentikan. Jalankan lagi untuk resume.")
         raise
     except Exception as e:
         print(f"✗ Error: {e}")
