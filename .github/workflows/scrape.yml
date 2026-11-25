@@ -8,8 +8,8 @@ permissions:
 
 jobs:
   scrape:
-    runs-on: self-hosted          # ← kunci: pakai PC sendiri, IP residential
-    timeout-minutes: 60
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
 
     steps:
       - name: Checkout
@@ -23,9 +23,11 @@ jobs:
           python-version: "3.12"
 
       - name: Install dependencies
-        run: pip install requests
+        run: pip install curl_cffi
 
       - name: Run scraper
+        env:
+          MAX_WORKERS: "12"
         run: python scrape.py
 
       - name: Commit & push result
