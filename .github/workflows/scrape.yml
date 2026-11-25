@@ -1,0 +1,59 @@
+name: Scrape FF Wiki
+
+on:
+  workflow_dispatch:
+  # schedule:
+  #   - cron: "0 3 * * *"   # aktifkan kalau mau harian
+
+permissions:
+  contents: read
+
+jobs:
+  scrape:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Setup Python
+        uses: actions/setup-python@v5
+        with:
+          python-version: "3.12"
+          cache: "pip"
+
+      - name: Install dependencies
+        run: pip install requests
+
+      - name: Run scraper
+        env:
+          # Kalau repo public, pakai Secrets. Kalau private, boleh hardcode.
+          FFJ_SEARCH: ${{ secrets.FFJ_SEARCH }}
+          FFJ_WISHLIST: ${{ secrets.FFJ_WISHLIST }}
+          CF_CLEARANCE: ${{ secrets.CF_CLEARANCE }}
+          PAGE_PROOF: ${{ secrets.PAGE_PROOF }}
+          # Tuning untuk GA (lebih rendah dari lokal supaya tidak 429)
+          MAX_WORKERS: "12"
+          TOKEN_BATCH: "80"
+        run: python scrape.py
+
+      - name: Upload result
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: skins-json
+          path: |
+            all_skins.json
+            progress.json
+          if-no-files-found: warn
+          retention-days: 7
+
+      - name: Upload progress on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: progress-fail
+          path: progress.json
+          if-no-files-found: ignore
+          retention-days: 3
