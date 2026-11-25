@@ -2,11 +2,9 @@ name: Scrape FF Wiki
 
 on:
   workflow_dispatch:
-  # schedule:
-  #   - cron: "0 3 * * *"   # aktifkan kalau mau harian
 
 permissions:
-  contents: read
+  contents: write        # ← wajib untuk push
 
 jobs:
   scrape:
@@ -16,6 +14,8 @@ jobs:
     steps:
       - name: Checkout
         uses: actions/checkout@v4
+        with:
+          persist-credentials: true   # supaya bisa push balik
 
       - name: Setup Python
         uses: actions/setup-python@v5
@@ -27,33 +27,21 @@ jobs:
         run: pip install requests
 
       - name: Run scraper
-        env:
-          # Kalau repo public, pakai Secrets. Kalau private, boleh hardcode.
-          FFJ_SEARCH: ${{ secrets.FFJ_SEARCH }}
-          FFJ_WISHLIST: ${{ secrets.FFJ_WISHLIST }}
-          CF_CLEARANCE: ${{ secrets.CF_CLEARANCE }}
-          PAGE_PROOF: ${{ secrets.PAGE_PROOF }}
-          # Tuning untuk GA (lebih rendah dari lokal supaya tidak 429)
-          MAX_WORKERS: "12"
-          TOKEN_BATCH: "80"
         run: python scrape.py
 
-      - name: Upload result
+      - name: Commit & push result
         if: always()
-        uses: actions/upload-artifact@v4
-        with:
-          name: skins-json
-          path: |
-            all_skins.json
-            progress.json
-          if-no-files-found: warn
-          retention-days: 7
+        run: |
+          git config user.name  "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
 
-      - name: Upload progress on failure
-        if: failure()
-        uses: actions/upload-artifact@v4
-        with:
-          name: progress-fail
-          path: progress.json
-          if-no-files-found: ignore
-          retention-days: 3
+          # hanya add file yang ada (hindari error kalau file tidak dibuat)
+          [ -f all_skins.json ] && git add all_skins.json || true
+          [ -f progress.json  ] && git add progress.json  || true
+
+          if git diff --cached --quiet; then
+            echo "Tidak ada perubahan, skip commit."
+          else
+            git commit -m "chore: update all_skins.json [skip ci]"
+            git push
+          fi
